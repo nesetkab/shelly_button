@@ -1,7 +1,8 @@
 import asyncio
-import time  # <-- ADD THIS MODULE
+import time
 from bleak import BleakScanner
-from pynput.keyboard import Controller, Key
+import Quartz
+from ScriptingBridge import SBApplication
 
 # NEW: Import only the classes we need
 from bthome_ble import (
@@ -45,19 +46,73 @@ class WrapperBluetoothServiceInfo:
         }
 
 
-# --- Customize Your Key Mappings Here ---
-# Map button number (1, 2, 3, 4) to a key.
-# Use 'a', 'b', etc. for letter keys.
-# For special keys (like Enter, F1, media keys), use 'Key.enter', 'Key.f1', 'Key.media_play_pause'.
-KEY_MAPPING = {
-    1: Key.up,
-    2: Key.down,
-    3: Key.left,
-    4: Key.right,
+# --- Slide Configuration ---
+# Normal slides (non-CYOA): button 4 goes back, button 1 advances
+NORMAL_SLIDES = {
+    1,
+    2,
+    3,
+    4,
+    5,
+    11,
+    12,
+    13,
+    14,
+    15,
+    21,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    38,
+    44,
+    45,
+    51,
+    52,
+}
+
+# CYOA choice slides (first slide of each CYOA group): buttons 1-4 jump to outcomes
+CYOA_CHOICE_SLIDES = {6, 16, 22, 33, 39, 46}
+
+# CYOA outcome slides: button 1 jumps to next section, button 4 goes back to choice slide
+# Format: outcome_slide: (choice_slide, next_normal_slide)
+CYOA_OUTCOME_SLIDES = {
+    # Group 6-10: choice=6, next=11
+    7: (6, 11),
+    8: (6, 11),
+    9: (6, 11),
+    10: (6, 11),
+    # Group 16-20: choice=16, next=21
+    17: (16, 21),
+    18: (16, 21),
+    19: (16, 21),
+    20: (16, 21),
+    # Group 22-26: choice=22, next=27
+    23: (22, 27),
+    24: (22, 27),
+    25: (22, 27),
+    26: (22, 27),
+    # Group 33-37: choice=33, next=38
+    34: (33, 38),
+    35: (33, 38),
+    36: (33, 38),
+    37: (33, 38),
+    # Group 39-43: choice=39, next=44
+    40: (39, 44),
+    41: (39, 44),
+    42: (39, 44),
+    43: (39, 44),
+    # Group 46-50: choice=46, next=51
+    47: (46, 51),
+    48: (46, 51),
+    49: (46, 51),
+    50: (46, 51),
 }
 # ------------------------------------------
 
-# --- ADD DEBOUNCE LOGIC ---
+# --- Debounce ---
 # Cooldown period in seconds to prevent double-clicks
 DEBOUNCE_SECONDS = 1
 # Dictionary to store the timestamp of the last press for each button
@@ -72,38 +127,78 @@ LAST_PRESS_TIME = {
 # Full UUID for BTHome service
 BTHOME_SERVICE_UUID = "0000fcd2-0000-1000-8000-00805f9b34fb"
 
-# Global keyboard controller
-keyboard = Controller()
-
 # Dictionary to store the state of each button device we find
-# This prevents spamming keys by only reporting *new* events
 devices = {}
 
 
-def handle_key_press(button_num):
-    """Handles the logic for pressing a key, with debouncing."""
-    # --- ADD DEBOUNCE CHECK ---
+def send_key(key_code):
+    """Send a keyboard key press."""
+    event = Quartz.CGEventCreateKeyboardEvent(None, key_code, True)  # key down
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+    event = Quartz.CGEventCreateKeyboardEvent(None, key_code, False)  # key up
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+
+
+def get_keynote():
+    """Get Keynote application and document."""
+    try:
+        keynote = SBApplication.applicationWithBundleIdentifier_(
+            "com.apple.iWork.Keynote"
+        )
+        if keynote and keynote.documents():
+            return keynote, keynote.documents()[0]
+    except:
+        pass
+    return None, None
+
+
+def get_current_slide():
+    """Get the current slide number from Keynote via ScriptingBridge."""
+    try:
+        _, doc = get_keynote()
+        if doc:
+            return doc.currentSlide().slideNumber()
+    except Exception as e:
+        print(f"Failed to get slide: {e}")
+    return None
+
+
+def jump_to_slide(slide_num):
+    """Jump to a specific slide in Keynote."""
+    try:
+        keynote, doc = get_keynote()
+        if doc:
+            slides = doc.slides()
+            if 0 < slide_num <= len(slides):
+                target_slide = slides[slide_num - 1]
+                doc.setCurrentSlide_(target_slide)
+                print(f"Jumped to slide {slide_num}")
+                return True
+    except Exception as e:
+        print(f"Failed to jump to slide: {e}")
+    return False
+
+
+def is_debounced(button_num):
+    """Check if button press should be debounced. Returns True if too fast."""
     current_time = time.monotonic()
-
     if (current_time - LAST_PRESS_TIME[button_num]) < DEBOUNCE_SECONDS:
-        # If it's too soon since the last press, ignore this event
-        print(f"Button {button_num} press debounced (too fast).")
-        return
+        print(f"Button {button_num} debounced (too fast).")
+        return True
+    LAST_PRESS_TIME[button_num] = current_time
+    return False
 
-    # --- END DEBOUNCE CHECK ---
 
-    if button_num in KEY_MAPPING:
-        key_to_press = KEY_MAPPING[button_num]
-        print(f"Button {button_num} press detected. Emulating key: {key_to_press}")
+def next_slide():
+    """Advance to the next slide (sends right arrow key)."""
+    print("Advancing to next slide.")
+    send_key(124)  # 124 = right arrow key
 
-        # --- UPDATE LAST PRESS TIME ---
-        LAST_PRESS_TIME[button_num] = current_time
-        # --- END UPDATE ---
 
-        # Tap the key (press and release)
-        keyboard.tap(key_to_press)
-    else:
-        print(f"Button {button_num} press detected, but no key mapping found.")
+def prev_slide():
+    """Go back to previous slide (sends left arrow key)."""
+    print("Going back one slide.")
+    send_key(123)  # 123 = left arrow key
 
 
 def detection_callback(device, advertisement_data):
@@ -153,18 +248,47 @@ def detection_callback(device, advertisement_data):
                     # Get the button key (e.g., 'button_1', 'button_2', 'button_3', 'button_4')
                     button_key = event_obj.device_key.key
 
-                    # Check if the event type is a valid press (not None)
-                    # This will catch "press", "double_press", "hold_press", etc.
-                    if event_obj.event_type is not None:
-                        # THE VERY FINAL FIX: Check for "button_1" not "button"
+                    # Get the event type (press, long_press, etc.)
+                    event_type = event_obj.event_type
+
+                    if event_type is not None:
+                        # Determine button number
+                        button_num = None
                         if button_key == "button_1":
-                            handle_key_press(1)
+                            button_num = 1
                         elif button_key == "button_2":
-                            handle_key_press(2)
+                            button_num = 2
                         elif button_key == "button_3":
-                            handle_key_press(3)
+                            button_num = 3
                         elif button_key == "button_4":
-                            handle_key_press(4)
+                            button_num = 4
+
+                        if button_num and not is_debounced(button_num):
+                            current_slide = get_current_slide()
+
+                            if current_slide in NORMAL_SLIDES:
+                                # Normal slides: 1=next, 4=back
+                                if button_num == 1:
+                                    if current_slide == 51:
+                                        jump_to_slide(1)  # Restart
+                                    else:
+                                        next_slide()
+                                elif button_num == 4:
+                                    prev_slide()
+
+                            elif current_slide in CYOA_CHOICE_SLIDES:
+                                # CYOA choice slides: buttons jump to outcome slides
+                                jump_to_slide(current_slide + button_num)
+
+                            elif current_slide in CYOA_OUTCOME_SLIDES:
+                                # CYOA outcome slides: 1=jump to next section, 4=back to choice
+                                choice_slide, next_section = CYOA_OUTCOME_SLIDES[
+                                    current_slide
+                                ]
+                                if button_num == 1:
+                                    jump_to_slide(next_section)
+                                elif button_num == 4:
+                                    jump_to_slide(choice_slide)
                     # else:
                     # print(f"Ignoring 'None' event on {button_key}")
 
