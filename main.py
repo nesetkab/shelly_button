@@ -269,7 +269,7 @@ def detection_callback(device, advertisement_data):
                             if current_slide in NORMAL_SLIDES:
                                 # Normal slides: 1=next, 4=back
                                 if button_num == 1:
-                                    if current_slide == 51:
+                                    if current_slide == 52:
                                         jump_to_slide(1)  # Restart
                                     else:
                                         next_slide()
