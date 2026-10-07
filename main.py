@@ -66,15 +66,17 @@ NORMAL_SLIDES = {
     30,
     31,
     32,
-    38,
-    44,
-    45,
-    51,
-    52,
+    33,
+    34,
+    35,
+    41,
+    42,
+    48,
+    49,
 }
 
 # CYOA choice slides (first slide of each CYOA group): buttons 1-4 jump to outcomes
-CYOA_CHOICE_SLIDES = {6, 16, 22, 33, 39, 46}
+CYOA_CHOICE_SLIDES = {6, 16, 22, 36, 43}
 
 # CYOA outcome slides: button 1 jumps to next section, button 4 goes back to choice slide
 # Format: outcome_slide: (choice_slide, next_normal_slide)
@@ -94,21 +96,16 @@ CYOA_OUTCOME_SLIDES = {
     24: (22, 27),
     25: (22, 27),
     26: (22, 27),
-    # Group 33-37: choice=33, next=38
-    34: (33, 38),
-    35: (33, 38),
-    36: (33, 38),
-    37: (33, 38),
-    # Group 39-43: choice=39, next=44
-    40: (39, 44),
-    41: (39, 44),
-    42: (39, 44),
-    43: (39, 44),
-    # Group 46-50: choice=46, next=51
-    47: (46, 51),
-    48: (46, 51),
-    49: (46, 51),
-    50: (46, 51),
+    # Group 36-40: choice=36, next=41
+    37: (36, 41),
+    38: (36, 41),
+    39: (36, 41),
+    40: (36, 41),
+    # Group 43-47: choice=43, next=48
+    44: (43, 48),
+    45: (43, 48),
+    46: (43, 48),
+    47: (43, 48),
 }
 # ------------------------------------------
 
@@ -269,7 +266,7 @@ def detection_callback(device, advertisement_data):
                             if current_slide in NORMAL_SLIDES:
                                 # Normal slides: 1=next, 4=back
                                 if button_num == 1:
-                                    if current_slide == 52:
+                                    if current_slide == 49:
                                         jump_to_slide(1)  # Restart
                                     else:
                                         next_slide()
